@@ -1,9 +1,12 @@
 # import jwt
-# from datetime import datetime, timedelta
+import hashlib
+from datetime import datetime
+
 from flask import current_app
-from . import db, login_manager
-from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin, AnonymousUserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+
+from . import db, login_manager
 
 
 class Permission:
@@ -86,6 +89,13 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, index=True)
     password_hash = db.Column(db.String(128))
     role_id = db.Column(db.Integer, db.ForeignKey("roles.id"))
+    name = db.Column(db.String(64))
+    location = db.Column(db.String(64))
+    # The difference between db.String and db.Text is that db.Text is a variable-length field and as such does not need a maximum length.
+    about_me = db.Column(db.Text())
+    member_since = db.Column(db.DateTime(), default=datetime.utcnow())
+    last_seen = db.Column(db.DateTime(), default=datetime.utcnow())
+
     # confirmed = db.Column(db.Boolean, default=False)
 
     def __init__(self, **kwargs):
@@ -95,6 +105,9 @@ class User(UserMixin, db.Model):
                 self.role = Role.query.filter_by(name="Administrator").first()
             if self.role is None:
                 self.role = Role.query.filter_by(default=True).first()
+
+        if self.email is not None and self.avatar_hash is None:
+            self.avatar_hash = self.gravatar_hash()
 
     def __repr__(self):
         """a string representation of a model instance,
@@ -117,6 +130,27 @@ class User(UserMixin, db.Model):
 
     def is_administrator(self):
         return self.can(Permission.ADMIN)
+
+    def ping(self):
+        """ refreshing a user’s last visit time """
+        self.last_seen = datetime.utcnow()
+        db.session.add(self)
+        db.session.commit()
+
+    def change_email(self, new_email):
+        self.email = new_email
+        self.avatar_hash = self.gravatar_hash()
+        db.session.add(self)
+        return True
+
+    def gravatar_hash(self):
+        return hashlib.md5(self.email.lower().encode('utf-8')).hexdigest()
+
+    def gravatar(self, size=100, default='retro', rating='g'):  # identicon, monsterid, retro, wavatar, robohash
+        url = 'https://secure.gravatar.com/avatar'
+        hash = hashlib.md5(self.email.lower().encode('utf-8')).hexdigest()
+        return '{url}/{hash}?s={size}&d={default}&r={rating}'.format(
+            url=url, hash=hash, size=size, default=default, rating=rating)
 
     """
     def generate_confirmation_token(self, expiration=3600):

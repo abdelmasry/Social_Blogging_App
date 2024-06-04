@@ -1,12 +1,11 @@
 from flask import render_template, redirect, request, url_for, flash
 from flask_login import login_user, login_required, logout_user, current_user
 
-
 from . import auth
 from .forms import LoginForm, RegistrationForm
-from ..models import User
-#from ..email import send_email
+# from ..email import send_email
 from .. import db
+from ..models import User
 
 
 @auth.route("/login", methods=["GET", "POST"])
@@ -86,7 +85,7 @@ def register():
         )
         db.session.add(user)
         db.session.commit()
-        
+
         """token = user.generate_confirmation_token()
         send_email(
             user.email,
@@ -122,17 +121,25 @@ When a before_request or before_app_request callback returns a response or a red
 Flask sends that to the client without invoking the view function associated with the request. 
 This effectively allows these callbacks to intercept a request when necessary.
 """
+
+
+@auth.before_app_request
+def before_request():
+    if current_user.is_authenticated:
+        current_user.ping()
+        # if request.endpoint and request.blueprint != 'auth' and request.endpoint != 'static':  return redirect(url_for('auth.unconfirmed'))
+
+
 """
 @auth.before_app_request
 def before_request():
     if (
         current_user.is_authenticated
-        and not current_user.confirmed
+        and not current_user.confirmed # Not Implemented yet!
         and request.blueprint != "auth"
         and request.endpoint != "static"
     ):
         return redirect(url_for("auth.unconfirmed"))
-
 
 @auth.route("/unconfirmed")
 def unconfirmed():
