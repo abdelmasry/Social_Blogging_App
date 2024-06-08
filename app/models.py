@@ -7,6 +7,8 @@ from flask_login import UserMixin, AnonymousUserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from . import db, login_manager
+from markdown import markdown
+import bleach
 
 
 class Permission:
@@ -82,6 +84,45 @@ class Role(db.Model):
         db.session.commit()
 
 
+class Post(db.Model):
+    __tablename__ = "posts"
+    id = db.Column(db.Integer, primary_key=True)
+    body = db.Column(db.Text)
+    body_html = db.Column(db.Text)
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.now())
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    @staticmethod
+    def on_changed_body(target, value, oldvalue, initiator):
+        allowed_tags = [
+            "a",
+            "abbr",
+            "acronym",
+            "b",
+            "blockquote",
+            "code",
+            "em",
+            "i",
+            "li",
+            "ol",
+            "pre",
+            "strong",
+            "ul",
+            "h1",
+            "h2",
+            "h3",
+            "p",
+        ]
+        target.body_html = bleach.linkify(
+            bleach.clean(
+                markdown(value, output_format="html"), tags=allowed_tags, strip=True
+            )
+        )
+
+
+db.event.listen(Post.body, "set", Post.on_changed_body)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
@@ -93,9 +134,9 @@ class User(UserMixin, db.Model):
     location = db.Column(db.String(64))
     # The difference between db.String and db.Text is that db.Text is a variable-length field and as such does not need a maximum length.
     about_me = db.Column(db.Text())
-    member_since = db.Column(db.DateTime(), default=datetime.utcnow())
-    last_seen = db.Column(db.DateTime(), default=datetime.utcnow())
-
+    member_since = db.Column(db.DateTime(), default=datetime.now())
+    last_seen = db.Column(db.DateTime(), default=datetime.now())
+    posts = db.relationship("Post", backref="author", lazy="dynamic")
     # confirmed = db.Column(db.Boolean, default=False)
 
     def __init__(self, **kwargs):
@@ -105,9 +146,6 @@ class User(UserMixin, db.Model):
                 self.role = Role.query.filter_by(name="Administrator").first()
             if self.role is None:
                 self.role = Role.query.filter_by(default=True).first()
-
-        if self.email is not None and self.avatar_hash is None:
-            self.avatar_hash = self.gravatar_hash()
 
     def __repr__(self):
         """a string representation of a model instance,
@@ -132,8 +170,8 @@ class User(UserMixin, db.Model):
         return self.can(Permission.ADMIN)
 
     def ping(self):
-        """ refreshing a user’s last visit time """
-        self.last_seen = datetime.utcnow()
+        """refreshing a user’s last visit time"""
+        self.last_seen = datetime.now()
         db.session.add(self)
         db.session.commit()
 
@@ -144,13 +182,16 @@ class User(UserMixin, db.Model):
         return True
 
     def gravatar_hash(self):
-        return hashlib.md5(self.email.lower().encode('utf-8')).hexdigest()
+        return hashlib.md5(self.email.lower().encode("utf-8")).hexdigest()
 
-    def gravatar(self, size=100, default='retro', rating='g'):  # identicon, monsterid, retro, wavatar, robohash
-        url = 'https://secure.gravatar.com/avatar'
-        hash = hashlib.md5(self.email.lower().encode('utf-8')).hexdigest()
-        return '{url}/{hash}?s={size}&d={default}&r={rating}'.format(
-            url=url, hash=hash, size=size, default=default, rating=rating)
+    def gravatar(
+        self, size=100, default="retro", rating="g"
+    ):  # identicon, monsterid, retro, wavatar, robohash
+        url = "https://secure.gravatar.com/avatar"
+        hash = hashlib.md5(self.email.lower().encode("utf-8")).hexdigest()
+        return "{url}/{hash}?s={size}&d={default}&r={rating}".format(
+            url=url, hash=hash, size=size, default=default, rating=rating
+        )
 
     """
     def generate_confirmation_token(self, expiration=3600):

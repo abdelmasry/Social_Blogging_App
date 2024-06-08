@@ -1,0 +1,31 @@
+<!--
+The macro creates a Bootstrap pagination element, which is a styled unordered list. It defines the following page links inside it:
+• A “previous page” link. This link gets the disabled CSS class if the current page is the first page.
+• Links to all pages returned by the pagination object’s iter_pages() iterator. These pages are rendered as links with an explicit page number, 
+given as an argu‐ ment to url_for(). The page currently displayed is highlighted using the active CSS class. 
+Gaps in the sequence of pages are rendered with the ellipsis character.
+• A “next page” link. This link will appear disabled if the current page is the last page.
+-->
+
+{% macro pagination_widget(pagination, endpoint) %}
+<ul class="pagination">
+<li{% if not pagination.has_prev %} class="disabled"{% endif %}>
+<a href="{% if pagination.has_prev %}{{ url_for(endpoint, page = pagination.page - 1, **kwargs) }}{% else %}#{% endif %}"> &laquo;
+</a> </li>
+    {% for p in pagination.iter_pages() %}
+        {% if p %}
+            {% if p == pagination.page %} <li class="active">
+                <a href="{{ url_for(endpoint, page = p, **kwargs) }}">{{ p }}</a> </li>
+            {% else %}
+            <li>
+                <a href="{{ url_for(endpoint, page = p, **kwargs) }}">{{ p }}</a>
+            </li>
+            {% endif %}
+        {% else %}
+            <li class="disabled"><a href="#">&hellip;</a></li>
+        {% endif %}
+    {% endfor %}
+<li{% if not pagination.has_next %} class="disabled"{% endif %}> 
+    <a href="{% if pagination.has_next %}{{ url_for(endpoint, page = pagination.page + 1, **kwargs) }}{% else %}#{% endif %}">&raquo;</a> </li>
+</ul>
+{% endmacro %}
